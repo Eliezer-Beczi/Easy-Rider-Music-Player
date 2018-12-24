@@ -97,12 +97,12 @@ public class Controller implements Initializable {
     private ToggleButton repeatButton;
 
     private int nextSong;
-    private ArrayList<MediaPlayer> playlist;
+    private ArrayList<String> playlist;
     private MediaView mediaView;
 
     public Controller() {
         nextSong = 0;
-        playlist = new ArrayList<MediaPlayer>();
+        playlist = new ArrayList<String>();
         mediaView = null;
     }
 
@@ -139,7 +139,7 @@ public class Controller implements Initializable {
         });
     }
 
-    public void fileChooser(ActionEvent actionEvent) throws Exception {
+    public void fileChooser(ActionEvent actionEvent) {
         FileChooser fileChooser = new FileChooser();
         fileChooser.setInitialDirectory(new File("/home/eliezer"));
         fileChooser.getExtensionFilters().addAll(new FileChooser.ExtensionFilter("MP3 Files", "*.mp3"));
@@ -154,13 +154,14 @@ public class Controller implements Initializable {
 
         for (File f : selectedFiles) {
             // add song to playlist
-            playlist.add(createMediaPlayer(f.toURI().toString()));
+            playlist.add(f.getAbsolutePath());
 
             // add song to table
-            Mp3File mp3 = new Mp3File(f.getAbsolutePath());
-            ID3v2 tag = mp3.getId3v2Tag();
-            Song song = new Song(tag.getAlbum(), tag.getArtist(), tag.getTitle(), formatTime(mp3.getLengthInSeconds()), tag.getTrack(), tag.getGenreDescription(), tag.getYear());
-            table.getItems().add(song);
+            try {
+                table.getItems().add(getSongInfo(f.getAbsolutePath()));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
 
         // highlight first row
@@ -176,7 +177,7 @@ public class Controller implements Initializable {
         });
     }
 
-    public void folderChooser(ActionEvent actionEvent) throws Exception {
+    public void folderChooser(ActionEvent actionEvent) {
         DirectoryChooser directoryChooser = new DirectoryChooser();
         directoryChooser.setInitialDirectory(new File("/home/eliezer"));
         File selectedDirectory = directoryChooser.showDialog(null);
@@ -201,13 +202,14 @@ public class Controller implements Initializable {
 
         for (File f : files) {
             // add song to playlist
-            playlist.add(createMediaPlayer(f.toURI().toString()));
+            playlist.add(f.getAbsolutePath());
 
             // add song to table
-            Mp3File mp3 = new Mp3File(f.getAbsolutePath());
-            ID3v2 tag = mp3.getId3v2Tag();
-            Song song = new Song(tag.getAlbum(), tag.getArtist(), tag.getTitle(), formatTime(mp3.getLengthInSeconds()), tag.getTrack(), tag.getGenreDescription(), tag.getYear());
-            table.getItems().add(song);
+            try {
+                table.getItems().add(getSongInfo(f.getAbsolutePath()));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
 
         // highlight first row
@@ -221,6 +223,13 @@ public class Controller implements Initializable {
                 startAnew();
             }
         });
+    }
+
+    private Song getSongInfo(String path) throws Exception {
+        Mp3File mp3 = new Mp3File(path);
+        ID3v2 tag = mp3.getId3v2Tag();
+        return new Song(tag.getAlbum(), tag.getArtist(), tag.getTitle(), formatTime(mp3.getLengthInSeconds()),
+                tag.getTrack(), tag.getGenreDescription(), tag.getYear());
     }
 
     private String formatTime(long sec) {
@@ -244,11 +253,8 @@ public class Controller implements Initializable {
         return time;
     }
 
-    private MediaPlayer createMediaPlayer(String url) {
-        return new MediaPlayer(new Media(url));
-    }
-
     private void startPlayingSong() {
+        mediaView.getMediaPlayer().setVolume(volumeSlider.getValue() / 100);
         mediaView.getMediaPlayer().play();
         mediaView.getMediaPlayer().setOnEndOfMedia(new Runnable() {
             @Override
@@ -362,16 +368,33 @@ public class Controller implements Initializable {
     }
 
     private void setNextSong() {
-        mediaView = new MediaView(playlist.get(nextSong++));
+        File f = new File(playlist.get(nextSong++));
+        mediaView = new MediaView(new MediaPlayer(new Media(f.toURI().toString())));
     }
 
     private int getSelectedRow() {
         return table.getSelectionModel().getFocusedIndex();
     }
 
+    private void displaySongInfo() {
+        Song song;
+
+        try {
+            song = getSongInfo(playlist.get(nextSong - 1));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return;
+        }
+
+        albumLabel.setText(song.getAlbum());
+        artistLabel.setText(song.getArtist());
+        titleLabel.setText(song.getTitle());
+    }
+
     private void startAnew() {
         stopCurrentSong();
         setNextSong();
+        displaySongInfo();
         startPlayingSong();
     }
 
@@ -384,7 +407,7 @@ public class Controller implements Initializable {
             return;
         }
 
-        nextSong -= 2; // backpropagate
+        nextSong -= 2; // backpropagation
         selectRow(nextSong);
         Platform.runLater(new Runnable() {
             @Override
