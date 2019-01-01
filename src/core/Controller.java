@@ -17,6 +17,7 @@ import javafx.scene.media.MediaView;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.util.Callback;
+import javafx.util.Duration;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -98,12 +99,22 @@ public class Controller implements Initializable {
 
     private int nextSong;
     private ArrayList<String> playlist;
+
     private MediaView mediaView;
+    private Thread timeUpdater;
+
+    private volatile Boolean magicFlag;
+    private volatile Boolean sliderMoved;
 
     public Controller() {
         nextSong = 0;
         playlist = new ArrayList<String>();
+
         mediaView = null;
+        timeUpdater = null;
+
+        magicFlag = false;
+        sliderMoved = false;
     }
 
     @Override
@@ -189,17 +200,14 @@ public class Controller implements Initializable {
         File[] files = selectedDirectory.listFiles(new FileFilter() {
             @Override
             public boolean accept(File file) {
-                if (file.getName().endsWith(".mp3")) {
-                    return true;
-                }
-
-                return false;
+                return file.getName().endsWith(".mp3");
             }
         });
 
         table.getItems().clear(); // clear table
         playlist.clear(); // clear playlist
 
+        assert files != null;
         for (File f : files) {
             // add song to playlist
             playlist.add(f.getAbsolutePath());
@@ -254,6 +262,59 @@ public class Controller implements Initializable {
     }
 
     private void startPlayingSong() {
+        mediaView.getMediaPlayer().setOnReady(new Runnable() {
+            @Override
+            public void run() {
+                currentTime.setText(formatTime(0));
+
+                double totalDuration = mediaView.getMediaPlayer().getTotalDuration().toSeconds();
+                seekBar.setMax(totalDuration);
+                seekBar.setValue(0);
+
+                totalTime.setText(formatTime((long) totalDuration));
+            }
+        });
+
+        mediaView.getMediaPlayer().setOnPlaying(new Runnable() {
+            @Override
+            public void run() {
+                if (timeUpdater != null) {
+                    timeUpdater.interrupt();
+                }
+
+                timeUpdater = new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        while (true) {
+                            if (mediaView.getMediaPlayer().getStatus() == MediaPlayer.Status.PLAYING && !sliderMoved) {
+                                Platform.runLater(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        magicFlag = true;
+
+                                        double val = mediaView.getMediaPlayer().getCurrentTime().toSeconds();
+                                        currentTime.setText(formatTime((long) val));
+                                        seekBar.setValue(val);
+
+                                        magicFlag = false;
+                                    }
+                                });
+                            }
+
+                            try {
+                                Thread.sleep(100);
+                            } catch (InterruptedException e) {
+                                break;
+                            }
+                        }
+                    }
+                });
+
+                timeUpdater.setDaemon(true);
+                timeUpdater.start();
+            }
+        });
+
         mediaView.getMediaPlayer().setVolume(volumeSlider.getValue() / 100);
         mediaView.getMediaPlayer().play();
         mediaView.getMediaPlayer().setOnEndOfMedia(new Runnable() {
@@ -431,6 +492,29 @@ public class Controller implements Initializable {
             @Override
             public void run() {
                 startAnew();
+            }
+        });
+    }
+
+    public void seekBarHandler(MouseEvent mouseEvent) {
+        if (mediaView == null) {
+            return;
+        }
+
+        while (magicFlag) {
+        }
+
+        Platform.runLater(new Runnable() {
+            @Override
+            public void run() {
+                sliderMoved = true;
+
+                double val = seekBar.getValue();
+                Duration duration = Duration.seconds(val);
+                mediaView.getMediaPlayer().seek(duration);
+                currentTime.setText(formatTime((long) val));
+
+                sliderMoved = false;
             }
         });
     }

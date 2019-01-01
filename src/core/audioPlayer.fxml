@@ -92,7 +92,8 @@
         </HBox>
         <VBox prefHeight="82.0" prefWidth="747.0">
             <children>
-                <Slider fx:id="seekBar" prefHeight="5.0" prefWidth="747.0">
+                <Slider fx:id="seekBar" blockIncrement="1.0" majorTickUnit="1.0" minorTickCount="0"
+                        onMousePressed="#seekBarHandler" prefHeight="5.0" prefWidth="747.0" snapToTicks="true">
                     <padding>
                         <Insets bottom="10.0" left="10.0" right="10.0" top="40.0"/>
                     </padding>
